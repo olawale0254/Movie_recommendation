@@ -1,7 +1,59 @@
-version: "3.5"
+version: '3.8'
 services:
+  etl:
+    container_name: etl
+    build: .
+    command: python etl.py
+    env_file: 
+      - .env
+    depends_on:
+      - minio
+    networks:
+      - app-net
+  trainer:
+    container_name: trainer
+    build: .
+    command: python trainer.py
+    env_file: 
+      - .env
+    depends_on:
+      - minio
+    networks:
+      - app-net
   fastapi:
+    container_name: api
     restart: "always"
-    build: fastapi
+    env_file: 
+      - .env
+    build: .
+    depends_on:
+      - minio
+      - etl
+      - trainer
+    networks:
+      - app-net
+    command: uvicorn app:app --host=0.0.0.0 --reload
     ports:
       - 8000:8000
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: "server /data --console-address ':9001'"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+      - app-net
+    volumes:
+      - ./data/minio-data:/data
+volumes:
+  cache:
+    driver: local
+  minio-data:
+    driver: local
+networks:
+  app-net:
+    driver: bridge
